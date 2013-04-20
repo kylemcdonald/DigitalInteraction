@@ -12,7 +12,7 @@ PFont font;
 void setup() {
   size(512, 200);
   frameRate(30);
-  oscP5 = new OscP5(this, 8338);
+  oscP5 = new OscP5(this, 8000);
   oscP5.plug(this, "handSize", "/hand/size");
   oscP5.plug(this, "handPosition", "/hand/position");
   

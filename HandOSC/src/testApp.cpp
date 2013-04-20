@@ -41,7 +41,7 @@ vector<int> findPeaks(vector<float>& values, float cutoff, int peakArea) {
 		int curIndex = peaks[i].second;
 		bool hasNeighbor = false;
 		for(int j = 0; j < indices.size(); j++) {
-			if(abs(curIndex - indices[j]) < peakArea) {
+			if(abs(curIndex - indices[j]) < peakArea || abs((curIndex + n) - indices[j]) < peakArea) {
 				hasNeighbor = true;
 				break;
 			}
@@ -60,12 +60,33 @@ void testApp::setup() {
 	contourFinder.setMinAreaRadius(10);
 	contourFinder.setMaxAreaRadius(400);
 	osc.setup("localhost", 8000);
+	
+	threshold = 64;
+	smoothing = 10;
+	sampleOffset = 60;
+	peakAngleCutoff = 45;
+	peakNeighborDistance = 60;
+	clearBackground = false;
+	
+	gui = new ofxUICanvas();
+	gui->addLabel("Hand OSC");
+	gui->addSpacer();
+	gui->addSlider("Threshold", 0.0, 255.0, &threshold);
+	gui->addSlider("Smoothing", 0.0, 20, &smoothing);
+	gui->addSlider("Sample offset", 0.0, 100, &sampleOffset);
+	gui->addSlider("Peak angle cutoff", 0, 90, &peakAngleCutoff);
+	gui->addSlider("Peak neighbor distance", 0, 100, &peakNeighborDistance);
+	gui->addSpacer();
+	gui->addLabelButton("Clear background", &clearBackground);
+	gui->autoSizeToFitWidgets();
 }
 
 void testApp::update() {
+	if(clearBackground) {
+		runningBackground.reset();
+	}
 	cam.update();
 	if(cam.isFrameNew()) {
-		int threshold = ofMap(mouseX, 0, ofGetWidth(), 0, 255);
 		runningBackground.setThresholdValue(threshold);
 		runningBackground.update(cam, thresholded);
 		thresholded.update();
@@ -80,27 +101,46 @@ void testApp::update() {
 					maxAreaIndex = i;
 				}
 			}
+			area = maxArea;
 			centroid = toOf(contourFinder.getCentroid(maxAreaIndex));
 			biggest = contourFinder.getPolyline(maxAreaIndex);
 			resampled = biggest.getResampledBySpacing(1);
-			resampled = resampled.getSmoothed(6);
+			resampled = resampled.getSmoothed(smoothing);
 			
-			int offset = 60, peakCutoff = 30, peakArea = 60;
-			curvature = buildContourAnalysis(resampled, offset);
-			peaks = findPeaks(curvature, peakCutoff, peakArea);
+			int padding = 8;
+			curvature = buildContourAnalysis(resampled, sampleOffset);
+			peaks = findPeaks(curvature, peakAngleCutoff, peakNeighborDistance);
 			fingers.clear();
 			for(int i = 0; i < peaks.size(); i++) {
 				ofVec2f finger = resampled[peaks[i]];
-				if(finger.y < ofGetHeight() - 8) {
+				if(finger.y < ofGetHeight() - padding) {
 					fingers.push_back(finger);
 				}
 			}
 			
-			ofxOscMessage msg;
-			msg.setAddress("/hand/size");
-			msg.addFloatArg(sqrtf(maxArea));
-			osc.sendMessage(msg);
+			sendOsc();
 		}
+	}
+}
+
+void testApp::sendOsc() {
+	ofxOscMessage handSize;
+	handSize.setAddress("/hand/size");
+	handSize.addFloatArg(sqrtf(area));
+	osc.sendMessage(handSize);
+	
+	ofxOscMessage handPosition;
+	handPosition.setAddress("/hand/position");
+	handPosition.addFloatArg(centroid.x);
+	handPosition.addFloatArg(centroid.y);
+	osc.sendMessage(handPosition);
+	
+	for(int i = 0; i < fingers.size(); i++) {
+		ofxOscMessage fingerPosition;
+		fingerPosition.setAddress("/hand/finger/" + ofToString(i));
+		fingerPosition.addFloatArg(fingers[i].x);
+		fingerPosition.addFloatArg(fingers[i].y);
+		osc.sendMessage(fingerPosition);
 	}
 }
 
@@ -114,7 +154,7 @@ void testApp::draw() {
 	
 	ofSetLineWidth(3);
 	ofSetColor(255);
-	biggest.draw();
+	resampled.draw();
 	ofSetColor(magentaPrint);
 	ofNoFill();
 	for(int i = 0; i < fingers.size(); i++) {
