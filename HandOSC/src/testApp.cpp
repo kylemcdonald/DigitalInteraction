@@ -59,7 +59,12 @@ void testApp::setup() {
 	cam.initGrabber(640, 480);
 	contourFinder.setMinAreaRadius(10);
 	contourFinder.setMaxAreaRadius(400);
-	osc.setup("localhost", 8000);
+	
+	ofxXmlSettings xml;
+	xml.loadFile("settings.xml");
+	string host = xml.getValue("host", "localhost");
+	int port = xml.getValue("port", 8000);
+	osc.setup(host, port);
 	
 	threshold = 64;
 	smoothing = 10;
