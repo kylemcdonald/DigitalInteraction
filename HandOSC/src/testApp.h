@@ -16,6 +16,10 @@ public:
 	ofxCv::RunningBackground runningBackground;
 	ofImage thresholded;
 	ofxCv::ContourFinder contourFinder;
-	ofPolyline biggest;
+	ofPolyline biggest, resampled;
+	vector<float> curvature;
+	vector<int> peaks;
+	vector<ofVec2f> fingers;
+	ofVec2f centroid;
 	ofxOscSender osc;
 };
