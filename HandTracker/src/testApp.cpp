@@ -39,7 +39,8 @@ void testApp::randomPose() {
 		handPose = bestHandPose;
 		iterations = 0;
 	} else {
-		handPose.randomDeviation(rating * rating);
+//		handPose.randomDeviation(rating);
+		handPose.randomDeviation(labelRating);
 		iterations++;
 	}
 	updateGuiFromPose();
@@ -55,15 +56,17 @@ void testApp::setup(){
 	ofSetLogLevel(OF_LOG_VERBOSE);
 	
 	reference.loadImage("three.png");
+	reference.setImageType(OF_IMAGE_GRAYSCALE);
+	reference.update();
 	int side = 128;
 	fbo.allocate(side, side);
 	
-	best.allocate(side, side, OF_IMAGE_COLOR);
+	best.allocate(side, side, OF_IMAGE_GRAYSCALE);
 	bestDifference = side * side;
 	rating = 1;
 	iterations = 0;
 	
-	gui.setup();
+	gui.setup();	
 	
 	ofDisableArbTex();
 	if(model.loadModel("rigged-human.dae")){
@@ -72,6 +75,10 @@ void testApp::setup(){
 			gui.add(Slider(handPose.getName(i), handPose.getMin(i), handPose.getMax(i), 0));
 		}
 	}
+	
+	handPose.load("three.txt");
+	handPose.randomDeviation(.2);
+	updateGuiFromPose();
 	
 	updateModel();
 }
@@ -122,21 +129,37 @@ void testApp::updateModel() {
 void testApp::updateDifference() {
 	ofPixels current;
 	fbo.readToPixels(current);
+	current.setImageType(OF_IMAGE_GRAYSCALE);
 	int width = current.getWidth(), height = current.getHeight();
-	int i = 0;
-	int difference = 0, total = 0;
+	int n = width * height, difference = 0;
+	int boneCount = model.getBoneCount();
+	labelDifference = vector<int>(boneCount);
+	labelTotal = vector<int>(boneCount);
 	unsigned char* referencePixels = reference.getPixels();
 	unsigned char* currentPixels = current.getPixels();
-	for(int y = 0; y < height; y++) {
-		for(int x = 0; x < width; x++) {
-			if(referencePixels[i] != currentPixels[i]) {
+	for(int i = 0; i < n; i++) {
+		if(currentPixels[i] > 0) {
+			int label = 255 - currentPixels[i];
+			if(referencePixels[i] == 0) {
+				labelDifference[label]++;
 				difference++;
 			}
-			i += 3;
-			total++;
+			labelTotal[label]++;
 		}
 	}
-	rating = (float) difference / total;
+	rating = (float) difference / n;
+	
+	// pose iteration order is different than bone order
+	for(int i = 0; i < boneCount; i++) {
+		const aiBone* bone = model.getBone(i);
+		if(labelTotal[i] > 0) {
+			string name = bone->mName.data;
+			float curRating = (float) labelDifference[i] / labelTotal[i];
+			labelRating[name + ".x"] = curRating;
+			labelRating[name + ".y"] = curRating;
+			labelRating[name + ".z"] = curRating;
+		}
+	}
 	if(difference < bestDifference) {
 		best = current;
 		best.update();
@@ -154,10 +177,15 @@ void testApp::draw(){
 	ofSetupScreenOrtho(fbo.getWidth(), fbo.getHeight(), OF_ORIENTATION_DEFAULT, false, -1000, 1000);
 	ofTranslate(fbo.getWidth() / 2, fbo.getHeight() / 2);
 	ofScale(fbo.getWidth() / 512., fbo.getHeight() / 512.);
+	ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+	glEnable(GL_DEPTH_TEST);
+	glShadeModel(GL_FLAT); // important for not smoothing color labels
 	model.drawSkeleton();
 	fbo.end();
 	
 	updateDifference();
+	
+	glDisable(GL_DEPTH_TEST);
 	
 	ofSetColor(255);
 	ofEnableBlendMode(OF_BLENDMODE_ADD);
@@ -167,14 +195,21 @@ void testApp::draw(){
 	ofSetColor(0, 128, 255);
 	reference.setAnchorPercent(.5, 1);
 	reference.draw(ofGetWidth() / 2, ofGetHeight() / 2);
-	
-	
+	            
 	ofSetColor(255, 128, 0);
 	best.setAnchorPercent(.5, 0);
 	best.draw(ofGetWidth() / 2, ofGetHeight() / 2);
 	ofSetColor(0, 128, 255);
 	reference.setAnchorPercent(.5, 0);
 	reference.draw(ofGetWidth() / 2, ofGetHeight() / 2);
+
+	ofSetColor(255);
+	ofPushMatrix();
+	for(map<string, float>::iterator itr = labelRating.begin(); itr != labelRating.end(); itr++) {
+		ofRect(0, 0, 0, 4, itr->second * 100);
+		ofTranslate(4, 0);
+	}
+	ofPopMatrix();
 }
 
 void testApp::keyPressed(int key) {

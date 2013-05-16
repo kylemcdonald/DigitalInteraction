@@ -61,10 +61,25 @@ public:
 			file << getValue(i) << endl;
 		}
 	}
+	void load(string filename) {
+		ofFile file(filename, ofFile::ReadOnly);
+		for(int i = 0; i < size(); i++) {
+			file >> getValue(i);
+		}
+	}
 	void randomDeviation(float stddev) {
 		for(int i = 0; i < size(); i++) {
 			float range = maxValues[i] - minValues[i];
 			float curWidth = range * stddev;
+			values[i] = ofClamp(RandomGaussian(values[i], curWidth), minValues[i], maxValues[i]);
+		}
+	}
+	void randomDeviation(map<string, float>& stddev) {
+		for(int i = 0; i < size(); i++) {
+			string& name = names[i];
+			float curstddev = stddev[name];
+			float range = maxValues[i] - minValues[i];
+			float curWidth = range * curstddev;
 			values[i] = ofClamp(RandomGaussian(values[i], curWidth), minValues[i], maxValues[i]);
 		}
 	}
@@ -158,6 +173,9 @@ protected:
 			}
 		}
 		
+		int m = modelMeshes[which].animatedPos.size();
+		vector< vector<int> > vertexBones(m);
+		
 		influence.clear();
 		influence.setMode(OF_PRIMITIVE_LINES);
 		for(int a = 0; a < n; a++) {
@@ -169,6 +187,25 @@ protected:
 				const aiVector3D& cur = modelMeshes[which].animatedPos[vertexId];
 				influence.addVertex(ofVec3f(avg[a].x, avg[a].y, avg[a].z));
 				influence.addVertex(ofVec3f(cur.x, cur.y, cur.z));
+				vertexBones[vertexId].push_back(a);
+			}
+		}
+		
+		vector<int> vertexLabel(m);
+		for(int i = 0; i < m; i++) {
+			float bestDistance = 0;
+			for(int j = 0; j < vertexBones[i].size(); j++) {
+				int cur = vertexBones[i][j];
+				const aiVector3D& joint = avg[cur];
+				const aiVector3D& vertex = modelMeshes[which].animatedPos[i];
+				float dx = joint.x - vertex.x;
+				float dy = joint.y - vertex.y;
+				float dz = joint.z - vertex.z;
+				float distance = dx * dx + dy * dy + dz * dz;
+				if(j == 0 || distance < bestDistance) {
+					vertexLabel[i] = 255 - cur;
+					bestDistance = distance;
+				}
 			}
 		}
 		
@@ -194,12 +231,13 @@ protected:
 			}
 		}
 		maskedCenter /= maskedTotal;
-		
-		for(int i = 0; i < modelMeshes[which].animatedPos.size(); i++) {
+				
+		for(int i = 0; i < m; i++) {
 			const aiVector3D& cur = modelMeshes[which].animatedPos[i];
 			maskedModel.addVertex(ofVec3f(cur.x, cur.y, cur.z));
 			const aiVector3D& norm = modelMeshes[which].animatedNorm[i];
 			maskedModel.addNormal(ofVec3f(norm.x, norm.y, norm.z));
+			maskedModel.addColor(ofColor(vertexLabel[i]));
 		}
 		
 		for(int i = 0; i < modelMeshes[which].indices.size(); i+= 3) {
@@ -214,6 +252,12 @@ protected:
 		}
 	}
 public:
+	int getBoneCount(int which = 0) {
+		return modelMeshes[which].mesh->mNumBones;
+	}
+	const aiBone* getBone(int i, int which = 0) {
+		return modelMeshes[which].mesh->mBones[i];
+	}
 	Pose getPose(int which = 0) {
 		const aiMesh* mesh = modelMeshes[which].mesh;	
 		int n = mesh->mNumBones;
@@ -251,9 +295,9 @@ public:
 		ofTranslate(-maskedCenter);
 		
 		ofSetColor(255);
-		for(int i = 0; i < 64; i++) {
+		//for(int i = 0; i < 64; i++) {
 			maskedModel.draw();
-		}
+		//}
 		//maskedModel.drawWireframe();
 		
 		ofPopMatrix();
@@ -292,4 +336,6 @@ public:
 	ofImage best;
 	float rating;
 	int bestDifference;
+	vector<int> labelDifference, labelTotal;
+	map<string, float> labelRating;
 };

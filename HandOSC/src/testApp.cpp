@@ -152,11 +152,12 @@ void testApp::sendOsc() {
 void testApp::draw() {
 	ofSetColor(255);
 	cam.draw(0, 0);
+	
 	ofEnableBlendMode(OF_BLENDMODE_ADD);
 	ofSetColor(255, 64);
 	thresholded.draw(0, 0);
-	ofEnableBlendMode(OF_BLENDMODE_ALPHA);
 	
+	ofEnableBlendMode(OF_BLENDMODE_ALPHA);
 	ofSetLineWidth(3);
 	ofSetColor(255);
 	resampled.draw();
